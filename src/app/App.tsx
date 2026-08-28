@@ -1,5 +1,11 @@
 import { useState, useRef, useEffect, type DragEvent } from "react";
-import { Play, Pause, Upload, Zap, Link2, Music } from "lucide-react";
+import { Play, Pause, Upload, Zap, Link2, Music, Minus, Square, X, Disc3 } from "lucide-react";
+import {
+  CA, CB, BG, MONO, COND, UI,
+  desktopBg, glass, well, glossyBtn, orbSheen, chromeFrame, titleBar,
+} from "./aero";
+import demoDuelUrl from "../assets/demo/duel-of-the-fates.mp3";
+import demoFlexUrl from "../assets/demo/flex-up.mp3";
 
 // ─── Camelot data ──────────────────────────────────────────────────────────────
 const CAMELOT = [
@@ -17,12 +23,6 @@ const CAMELOT = [
   { pos: 12, A: "Dm",  B: "F"  },
 ] as const;
 
-const CA   = "#00e5ff";
-const CB   = "#ff6b1a";
-const BG   = "#07070f";
-const MONO = "'JetBrains Mono', monospace";
-const COND = "'Barlow Condensed', sans-serif";
-
 type KeyType = "A" | "B";
 
 interface DeckInfo {
@@ -32,6 +32,20 @@ interface DeckInfo {
   tempo:       number;
   trackName:   string;
   loaded:      boolean;
+}
+
+// ─── Demo tracks ──────────────────────────────────────────────────────────────
+// Bundled so the app is testable without uploading. Camelot/BPM values are
+// rough tags for these two files, not analysed — adjust in-app if it matters.
+const DEMOS: Record<"A" | "B", { url: string; name: string; bpm: number; pos: number; type: KeyType }> = {
+  A: { url: demoDuelUrl, name: "John Williams — Duel of the Fates", bpm: 100, pos: 4, type: "A" },
+  B: { url: demoFlexUrl, name: "Lil Yachty, Future, Playboi Carti — Flex Up", bpm: 130, pos: 11, type: "A" },
+};
+
+async function fetchAsFile(url: string, name: string): Promise<File> {
+  const res  = await fetch(url);
+  const blob = await res.blob();
+  return new File([blob], name, { type: blob.type || "audio/mpeg" });
 }
 
 // ─── Compatibility ─────────────────────────────────────────────────────────────
@@ -176,34 +190,43 @@ function CamelotWheel({ aPos, aType, bPos, bType }: {
 }) {
   const C = 130, R0 = 38, R1 = 70, R2 = 102;
   return (
-    <svg width={260} height={260} viewBox="0 0 260 260">
+    <svg width={168} height={168} viewBox="0 0 260 260" style={{ filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.55))", flexShrink: 0 }}>
+      <defs>
+        <radialGradient id="wheelGloss" cx="50%" cy="34%" r="70%">
+          <stop offset="0%"  stopColor="rgba(255,255,255,0.28)" />
+          <stop offset="45%" stopColor="rgba(255,255,255,0.05)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0.20)" />
+        </radialGradient>
+      </defs>
+      <circle cx={C} cy={C} r={R2 + 6} fill="#0c1120" stroke="rgba(255,255,255,0.14)" strokeWidth={2} />
       {CAMELOT.map(({ pos }) => {
         const a0  = (pos - 1) * 30 - 14.5, a1 = a0 + 29, mid = (a0 + a1) / 2;
         const isAa = pos === aPos && aType === "A", isAb = pos === bPos && bType === "A";
         const isBa = pos === aPos && aType === "B", isBb = pos === bPos && bType === "B";
-        const fillA = isAa ? CA : isAb ? CB : "#111128";
-        const fillB = isBa ? CA : isBb ? CB : "#181832";
-        const tA    = (isAa || isAb) ? BG : "#50508a";
-        const tB    = (isBa || isBb) ? BG : "#60609a";
+        const fillA = isAa ? CA : isAb ? CB : "#151a30";
+        const fillB = isBa ? CA : isBb ? CB : "#1d2440";
+        const tA    = (isAa || isAb) ? BG : "#7a86c0";
+        const tB    = (isBa || isBb) ? BG : "#8a96d0";
         const cA    = polar(C, C, (R0 + R1) / 2, mid);
         const cB    = polar(C, C, (R1 + R2) / 2, mid);
         return (
           <g key={pos}>
-            <path d={arcPath(C, C, R0, R1, a0, a1)} fill={fillA} stroke={BG} strokeWidth={1.5} style={{ transition: "fill 0.25s" }} />
-            <path d={arcPath(C, C, R1, R2, a0, a1)} fill={fillB} stroke={BG} strokeWidth={1.5} style={{ transition: "fill 0.25s" }} />
+            <path d={arcPath(C, C, R0, R1, a0, a1)} fill={fillA} stroke="#0a0e1c" strokeWidth={1.5} style={{ transition: "fill 0.25s" }} />
+            <path d={arcPath(C, C, R1, R2, a0, a1)} fill={fillB} stroke="#0a0e1c" strokeWidth={1.5} style={{ transition: "fill 0.25s" }} />
             <text x={cA.x} y={cA.y} textAnchor="middle" dominantBaseline="middle" fontSize={7}   fill={tA} fontFamily={MONO} fontWeight={700} style={{ pointerEvents: "none", userSelect: "none" }}>{pos}A</text>
             <text x={cB.x} y={cB.y} textAnchor="middle" dominantBaseline="middle" fontSize={6.5} fill={tB} fontFamily={MONO} fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>{pos}B</text>
           </g>
         );
       })}
-      <circle cx={C} cy={C} r={R0 - 2} fill={BG} stroke="#12122a" strokeWidth={1} />
-      <text x={C} y={C - 7} textAnchor="middle" fontSize={7.5} fill="#3a3a6a" fontFamily={MONO}>CAMELOT</text>
-      <text x={C} y={C + 7} textAnchor="middle" fontSize={6.5} fill="#2a2a4a" fontFamily={MONO}>WHEEL</text>
+      <circle cx={C} cy={C} r={R2 + 6} fill="url(#wheelGloss)" style={{ pointerEvents: "none" }} />
+      <circle cx={C} cy={C} r={R0 - 2} fill="#0a0e1c" stroke="rgba(255,255,255,0.10)" strokeWidth={1} />
+      <text x={C} y={C - 7} textAnchor="middle" fontSize={7.5} fill="#5a5a9a" fontFamily={MONO}>CAMELOT</text>
+      <text x={C} y={C + 7} textAnchor="middle" fontSize={6.5} fill="#4a4a7a" fontFamily={MONO}>WHEEL</text>
     </svg>
   );
 }
 
-// ─── Transition View ───────────────────────────────────────────────────────────
+// ─── Transition View (waveform canvas — unchanged engine) ──────────────────────
 function TransitionView({
   peaksA, peaksB, durationA, durationB,
   bpmA, bpmB, loadedA, loadedB,
@@ -377,108 +400,155 @@ function TransitionView({
   const barsShown = Math.round((winSec * 2 * avgBpm) / 60 / 4);
 
   return (
-    <div style={{ position: "relative", borderBottom: "1px solid #111128", background: "#060612", userSelect: "none" }}>
-      <div style={{ position: "absolute", top: 5, left: 10, zIndex: 2, pointerEvents: "none" }}>
-        <span style={{ fontFamily: MONO, fontSize: 9, color: CA + "bb", letterSpacing: "0.12em" }}>
+    <div style={{ position: "relative", margin: "6px 8px", borderRadius: 10, overflow: "hidden", flexShrink: 0, ...well, userSelect: "none" }}>
+      <div style={{ position: "absolute", top: 4, left: 10, zIndex: 2, pointerEvents: "none" }}>
+        <span style={{ fontFamily: MONO, fontSize: 8, color: CA + "dd", letterSpacing: "0.12em", textShadow: `0 0 8px ${CA}88` }}>
           A {loadedA ? "← drag to seek →" : "— drop a track —"}
         </span>
       </div>
-      <div style={{ position: "absolute", bottom: 5, left: 10, zIndex: 2, pointerEvents: "none" }}>
-        <span style={{ fontFamily: MONO, fontSize: 9, color: CB + "bb", letterSpacing: "0.12em" }}>
+      <div style={{ position: "absolute", bottom: 4, left: 10, zIndex: 2, pointerEvents: "none" }}>
+        <span style={{ fontFamily: MONO, fontSize: 8, color: CB + "dd", letterSpacing: "0.12em", textShadow: `0 0 8px ${CB}88` }}>
           B {loadedB ? "← drag to seek →" : "— drop a track —"}
         </span>
       </div>
       {beatOffsetMs !== null && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 2, pointerEvents: "none", textAlign: "center" }}>
-          <div style={{ background: "#0d0d1f", border: "1px solid #1a1a35", borderRadius: 6, padding: "3px 10px" }}>
+          <div style={{ ...glass("rgba(10,12,28,0.7)"), borderRadius: 8, padding: "3px 12px" }}>
             <span style={{ fontFamily: MONO, fontSize: 10, color: Math.abs(beatOffsetMs) < 20 ? "#00ff9d" : Math.abs(beatOffsetMs) < 80 ? "#ffd700" : "#ff4455" }}>
               {beatOffsetMs > 0 ? "+" : ""}{beatOffsetMs} ms
             </span>
           </div>
         </div>
       )}
-      <div style={{ position: "absolute", top: 6, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontFamily: MONO, fontSize: 9, color: "#33335a" }}>{barsShown} bars</span>
+      <div style={{ position: "absolute", top: 4, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 5 }}>
+        <span style={{ fontFamily: MONO, fontSize: 8, color: "#5a5a8a" }}>{barsShown} bars</span>
         <button onClick={() => setWinSec(s => Math.max(2, s / 2))}
-          style={{ width: 20, height: 20, background: "#12122a", border: "1px solid #1a1a35", color: "#6b6b8a", fontFamily: MONO, fontSize: 13, borderRadius: 3, cursor: "pointer", lineHeight: 1, padding: 0 }}>+</button>
+          style={{ ...glossyBtn("#3a7bd5"), width: 18, height: 18, fontSize: 12, borderRadius: 4, lineHeight: 1, padding: 0 }}>+</button>
         <button onClick={() => setWinSec(s => Math.min(32, s * 2))}
-          style={{ width: 20, height: 20, background: "#12122a", border: "1px solid #1a1a35", color: "#6b6b8a", fontFamily: MONO, fontSize: 13, borderRadius: 3, cursor: "pointer", lineHeight: 1, padding: 0 }}>−</button>
+          style={{ ...glossyBtn("#3a7bd5"), width: 18, height: 18, fontSize: 12, borderRadius: 4, lineHeight: 1, padding: 0 }}>−</button>
       </div>
       <canvas
         ref={canvasRef}
-        width={1600} height={200}
+        width={1600} height={150}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        style={{ width: "100%", height: 200, display: "block", cursor: "ew-resize" }}
+        style={{ width: "100%", height: 108, display: "block", cursor: "ew-resize" }}
       />
     </div>
   );
 }
 
-// ─── Styled range ──────────────────────────────────────────────────────────────
-function SRange({ min, max, step = 1, value, onChange, color, pct }: {
+// ─── Styled range (glossy chrome handle) ──────────────────────────────────────
+// Double-click anywhere on the track snaps back to `reset`.
+function SRange({ min, max, step = 1, value, onChange, color, pct, reset }: {
   min: number; max: number; step?: number; value: number;
-  onChange: (v: number) => void; color: string; pct: number;
+  onChange: (v: number) => void; color: string; pct: number; reset?: number;
 }) {
   return (
-    <div style={{ position: "relative", height: 18, display: "flex", alignItems: "center" }}>
-      <div style={{ position: "absolute", left: 0, right: 0, height: 3, borderRadius: 2, background: `linear-gradient(to right, ${color} ${pct}%, #12122a ${pct}%)` }} />
+    <div
+      onDoubleClick={reset !== undefined ? () => onChange(reset) : undefined}
+      title={reset !== undefined ? "double-click to reset" : undefined}
+      style={{ position: "relative", height: 20, display: "flex", alignItems: "center" }}>
+      <div style={{ position: "absolute", left: 0, right: 0, height: 8, borderRadius: 4, ...well }} />
+      <div style={{ position: "absolute", left: 0, width: `${pct}%`, height: 8, borderRadius: 4,
+        background: `linear-gradient(180deg, ${color}, ${color}88)`, boxShadow: `0 0 10px ${color}66, inset 0 1px 0 rgba(255,255,255,0.4)` }} />
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
+        onDoubleClick={reset !== undefined ? () => onChange(reset) : undefined}
         style={{ position: "absolute", left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0 }} />
-      <div style={{ position: "absolute", left: `calc(${pct}% - 6px)`, width: 12, height: 12, borderRadius: 2, background: color, boxShadow: `0 0 8px ${color}88`, pointerEvents: "none", transition: "left 0.04s" }} />
+      <div style={{ position: "absolute", left: `calc(${pct}% - 8px)`, width: 16, height: 16, borderRadius: "50%",
+        background: "linear-gradient(180deg, #ffffff, #c2c8dc 55%, #7d8399)",
+        border: "1px solid rgba(0,0,0,0.4)",
+        boxShadow: `0 2px 6px rgba(0,0,0,0.55), 0 0 10px ${color}66, inset 0 1px 0 rgba(255,255,255,0.9)`,
+        pointerEvents: "none", transition: "left 0.04s" }} />
     </div>
   );
 }
 
-// ─── EQ vertical slider ────────────────────────────────────────────────────────
+// ─── EQ vertical slider ───────────────────────────────────────────────────────
+// Double-click resets the band to flat (0 dB).
 function EQSlider({ label, value, onChange, color }: {
   label: string; value: number; onChange: (v: number) => void; color: string;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <span style={{ fontFamily: MONO, fontSize: 9, color: color + "66" }}>{label}</span>
-      <div style={{ height: 72, width: 24, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+      <span style={{ fontFamily: MONO, fontSize: 8, color: color + "aa", textShadow: `0 0 6px ${color}55` }}>{label}</span>
+      <div
+        onDoubleClick={() => onChange(0)}
+        title="double-click to reset"
+        style={{ height: 56, width: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, ...well }}>
         <input type="range" min={-12} max={12} step={0.5} value={value}
           onChange={e => onChange(parseFloat(e.target.value))}
-          style={{ writingMode: "vertical-lr" as const, direction: "rtl" as const, width: 20, height: 68, accentColor: color, cursor: "pointer" }} />
+          onDoubleClick={() => onChange(0)}
+          style={{ writingMode: "vertical-lr" as const, direction: "rtl" as const, width: 20, height: 50, accentColor: color, cursor: "pointer" }} />
       </div>
-      <span style={{ fontFamily: MONO, fontSize: 9, color: color + "88" }}>{value > 0 ? `+${value}` : value}</span>
+      <span style={{ fontFamily: MONO, fontSize: 8, color: color + "cc" }}>{value > 0 ? `+${value}` : value}</span>
     </div>
   );
 }
 
-// ─── Deck panel ────────────────────────────────────────────────────────────────
-function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing }: {
+// ─── Panel caption (Aero title strip) ─────────────────────────────────────────
+function Caption({ text, accent, right }: { text: string; accent: string; right?: React.ReactNode }) {
+  return (
+    <div style={{
+      ...titleBar(accent),
+      borderRadius: "8px 8px 0 0",
+      padding: "4px 10px",
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.18em",
+    }}>
+      <span>{text}</span>
+      {right}
+    </div>
+  );
+}
+
+// ─── Deck panel ───────────────────────────────────────────────────────────────
+function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing, onToggle }: {
   side: "A" | "B"; color: string;
   info: DeckInfo; onInfoChange: (p: Partial<DeckInfo>) => void;
   audioRef: React.RefObject<DeckAudio | null>;
   onLoad: (peaks: number[], duration: number) => void;
   playing: boolean;
+  onToggle: () => void;
 }) {
   const [vol, setVol] = useState(80);
   const [eqLo,    setEqLo]    = useState(0);
   const [eqMi,    setEqMi]    = useState(0);
   const [eqHi,    setEqHi]    = useState(0);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { audioRef.current?.setVol(vol / 100); }, [vol, audioRef]);
   useEffect(() => { audioRef.current?.setRate(1 + info.tempo / 100); }, [info.tempo, audioRef]);
   useEffect(() => { audioRef.current?.setEQ(eqLo, eqMi, eqHi); }, [eqLo, eqMi, eqHi, audioRef]);
 
-  async function loadFile(file: File) {
+  const [loadingDemo, setLoadingDemo] = useState(false);
+
+  async function loadFile(file: File, extra?: Partial<DeckInfo>) {
     const audio = audioRef.current;
     if (!audio) return;
     try {
       const buf = await audio.load(file);
       onLoad(computePeaks(buf, 4000), buf.duration);
-      onInfoChange({ trackName: file.name.replace(/\.[^.]+$/, ""), loaded: true });
+      onInfoChange({ trackName: file.name.replace(/\.[^.]+$/, ""), loaded: true, ...extra });
     } catch (e) { console.error("Decode error:", e); }
+  }
+
+  async function loadDemo() {
+    const d = DEMOS[side];
+    setLoadingDemo(true);
+    try {
+      const file = await fetchAsFile(d.url, d.name);
+      await loadFile(file, { bpm: d.bpm, camelotPos: d.pos, camelotType: d.type });
+    } catch (e) { console.error("Demo load failed:", e); }
+    finally { setLoadingDemo(false); }
   }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
+    setDragOver(false);
     const f = e.dataTransfer.files[0];
     if (f) loadFile(f);
   }
@@ -488,102 +558,156 @@ function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing 
   const tempoPct = ((info.tempo + 8) / 16) * 100;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "14px 18px", overflowY: "auto", height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, boxShadow: `0 0 10px ${color}` }} />
-        <span style={{ fontFamily: MONO, fontSize: 11, color, letterSpacing: "0.18em", fontWeight: 700 }}>DECK {side}</span>
-      </div>
-      <div onDrop={handleDrop} onDragOver={e => e.preventDefault()}
-        onClick={() => fileRef.current?.click()}
-        style={{ border: `1px dashed ${color}30`, borderRadius: 5, cursor: "pointer", padding: "10px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: color + "05", transition: "border-color 0.2s" }}>
-        <Upload size={14} style={{ color: color + "55" }} />
-        <span style={{ fontFamily: MONO, fontSize: 9, color: color + "44", letterSpacing: "0.12em" }}>
-          {info.loaded ? info.trackName.slice(0, 22) + (info.trackName.length > 22 ? "…" : "") : "DROP AUDIO / CLICK TO LOAD"}
-        </span>
-      </div>
-      <input ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) loadFile(f); }} />
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
-        <div>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: "#44446a", marginBottom: 2, letterSpacing: "0.12em" }}>BPM</div>
-          <div style={{ fontFamily: MONO, fontSize: 40, fontWeight: 700, lineHeight: 1, color, textShadow: `0 0 24px ${color}55` }}>{effBpm}</div>
+    <div style={{ ...chromeFrame, margin: 6, display: "flex", flexDirection: "column", overflow: "hidden", height: "calc(100% - 12px)" }}>
+      <Caption
+        text={`DECK ${side}`}
+        accent={side === "A" ? "#1f6fae" : "#c85a1e"}
+        right={
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 9, letterSpacing: "0.15em" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: playing ? color : "#556",
+                boxShadow: playing ? `0 0 8px ${color}` : "none" }} />
+              {playing ? "PLAYING" : "PAUSED"}
+            </span>
+            <button
+              onClick={e => { e.stopPropagation(); onToggle(); }}
+              disabled={!info.loaded}
+              title={`${playing ? "pause" : "play"} deck ${side}  (key: ${side === "A" ? "A" : "D"})`}
+              style={{
+                width: 26, height: 20, borderRadius: 5, padding: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: info.loaded ? "pointer" : "not-allowed",
+                opacity: info.loaded ? 1 : 0.4,
+                color: "#fff",
+                border: "1px solid rgba(255,255,255,0.4)",
+                background: playing
+                  ? `linear-gradient(180deg, #ffffff66, ${color}cc 55%, ${color})`
+                  : "linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0.08) 55%, rgba(0,0,0,0.2))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.4)",
+              }}>
+              {playing ? <Pause size={11} /> : <Play size={11} />}
+            </button>
+          </span>
+        }
+      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 12px 10px", flex: 1, minHeight: 0, justifyContent: "space-between", overflowY: "auto" }}>
+        <div
+          onDrop={handleDrop}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onClick={() => fileRef.current?.click()}
+          style={{
+            borderRadius: 8, cursor: "pointer", padding: "6px 10px",
+            display: "flex", alignItems: "center", gap: 8,
+            ...glass(dragOver ? `${color}22` : "rgba(20,26,48,0.4)"),
+            border: `1px dashed ${dragOver ? color : color + "55"}`,
+            transition: "border-color .2s, background .2s",
+          }}>
+          <Upload size={14} style={{ color: color + "cc", flexShrink: 0 }} />
+          <span style={{ fontFamily: MONO, fontSize: 9, color: color + "cc", letterSpacing: "0.1em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {info.loaded ? info.trackName : "DROP AUDIO / CLICK TO LOAD"}
+          </span>
+        </div>
+        <input ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) loadFile(f); }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "6px 12px", borderRadius: 8, ...well }}>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 8, color: "#6a6a9a", marginBottom: 1, letterSpacing: "0.12em" }}>BPM</div>
+            <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 700, lineHeight: 1, color,
+              textShadow: `0 0 24px ${color}66, 0 2px 4px rgba(0,0,0,0.6)` }}>{effBpm}</div>
+          </div>
           <input type="number" value={info.bpm} min={60} max={220}
             onChange={e => onInfoChange({ bpm: Math.max(60, Math.min(220, parseInt(e.target.value) || 128)) })}
-            style={{ marginTop: 4, width: 60, background: color + "10", border: `1px solid ${color}22`, borderRadius: 3, color: color + "aa", fontFamily: MONO, fontSize: 10, padding: "2px 5px", outline: "none", textAlign: "center" }}
+            onDoubleClick={() => onInfoChange({ bpm: 128 })}
+            title="double-click to reset"
+            style={{ width: 52, background: "rgba(0,0,0,0.4)", border: `1px solid ${color}44`, borderRadius: 4, color: color, fontFamily: MONO, fontSize: 10, padding: "3px 4px", outline: "none", textAlign: "center", alignSelf: "flex-end", marginBottom: 4 }}
           />
+          <div style={{ marginLeft: "auto", textAlign: "right" }}>
+            <div style={{ fontFamily: MONO, fontSize: 8, color: "#6a6a9a", marginBottom: 1, letterSpacing: "0.12em" }}>KEY</div>
+            <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, lineHeight: 1, color,
+              textShadow: `0 0 16px ${color}55` }}>{info.camelotPos}{info.camelotType}</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: color + "aa", marginTop: 2 }}>{keyName}</div>
+          </div>
         </div>
-        <div style={{ paddingBottom: 24 }}>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: "#44446a", marginBottom: 2, letterSpacing: "0.12em" }}>KEY</div>
-          <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 700, lineHeight: 1, color }}>{info.camelotPos}{info.camelotType}</div>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: color + "88", marginTop: 3 }}>{keyName}</div>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => fileRef.current?.click()}
+            style={{ ...glossyBtn(side === "A" ? "#1f6fae" : "#c85a1e"), flex: 1, padding: "0 14px", height: 24, fontSize: 9,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Upload size={10} /> LOAD TRACK
+          </button>
+          <button onClick={loadDemo} disabled={loadingDemo}
+            title={`load demo: ${DEMOS[side].name}`}
+            style={{ ...glossyBtn(side === "A" ? "#1f6fae" : "#c85a1e"), padding: "0 12px", height: 24, fontSize: 9,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+              opacity: loadingDemo ? 0.6 : 1, cursor: loadingDemo ? "wait" : "pointer" }}>
+            <Disc3 size={10} /> {loadingDemo ? "…" : "DEMO"}
+          </button>
         </div>
-      </div>
-      <button onClick={() => fileRef.current?.click()}
-        style={{ padding: "0 14px", height: 32, borderRadius: 4, background: color + "10", border: `1px solid ${color}28`, color: color + "88", fontFamily: MONO, fontSize: 10, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", letterSpacing: "0.1em", alignSelf: "flex-start" }}>
-        <Upload size={10} /> LOAD TRACK
-      </button>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, opacity: info.loaded ? 1 : 0.3 }}>
-        <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 16 }}>
-          {[0.4, 0.7, 1, 0.7, 0.4].map((h, i) => (
-            <div key={i} style={{
-              width: 3, borderRadius: 2, background: color,
-              height: playing ? `${h * 100}%` : "20%",
-              transition: "height 0.15s",
-              animation: playing ? `bounce-${i} ${0.5 + i * 0.1}s ease-in-out infinite alternate` : "none",
-              opacity: playing ? 0.9 : 0.3,
-            }} />
-          ))}
+
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: "#7a7aaa" }}>TEMPO {info.tempo > 0 ? `+${info.tempo.toFixed(1)}` : info.tempo.toFixed(1)}%</span>
+            <button onClick={() => onInfoChange({ tempo: 0 })} style={{ fontFamily: MONO, fontSize: 9, color: color + "88", background: "none", border: "none", cursor: "pointer", padding: 0 }}>RESET</button>
+          </div>
+          <SRange min={-8} max={8} step={0.1} value={info.tempo} onChange={v => onInfoChange({ tempo: v })} color={color} pct={tempoPct} reset={0} />
         </div>
-        <span style={{ fontFamily: MONO, fontSize: 9, color: playing ? color : color + "44", letterSpacing: "0.15em" }}>
-          {playing ? "PLAYING" : "PAUSED"}
-        </span>
-      </div>
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: "#44446a" }}>TEMPO {info.tempo > 0 ? `+${info.tempo.toFixed(1)}` : info.tempo.toFixed(1)}%</span>
-          <button onClick={() => onInfoChange({ tempo: 0 })} style={{ fontFamily: MONO, fontSize: 9, color: color + "44", background: "none", border: "none", cursor: "pointer", padding: 0 }}>RESET</button>
+
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: "#7a7aaa" }}>VOLUME</span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: color + "cc" }}>{vol}%</span>
+          </div>
+          <SRange min={0} max={100} value={vol} onChange={setVol} color={color} pct={vol} reset={80} />
         </div>
-        <SRange min={-8} max={8} step={0.1} value={info.tempo} onChange={v => onInfoChange({ tempo: v })} color={color} pct={tempoPct} />
-      </div>
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: "#44446a" }}>VOLUME</span>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: color + "88" }}>{vol}%</span>
+
+        <div style={{ padding: "5px 12px 6px", borderRadius: 8, ...well }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: "#7a7aaa", letterSpacing: "0.1em" }}>EQ</span>
+            <div style={{ display: "flex", justifyContent: "space-around", flex: 1 }}>
+              <EQSlider label="HI"  value={eqHi} onChange={setEqHi} color={color} />
+              <EQSlider label="MID" value={eqMi} onChange={setEqMi} color={color} />
+              <EQSlider label="LO"  value={eqLo} onChange={setEqLo} color={color} />
+            </div>
+          </div>
         </div>
-        <SRange min={0} max={100} value={vol} onChange={setVol} color={color} pct={vol} />
-      </div>
-      <div>
-        <div style={{ fontFamily: MONO, fontSize: 10, color: "#44446a", marginBottom: 6, letterSpacing: "0.1em" }}>EQ</div>
-        <div style={{ display: "flex", justifyContent: "space-around" }}>
-          <EQSlider label="HI"  value={eqHi} onChange={setEqHi} color={color} />
-          <EQSlider label="MID" value={eqMi} onChange={setEqMi} color={color} />
-          <EQSlider label="LO"  value={eqLo} onChange={setEqLo} color={color} />
-        </div>
-      </div>
-      <div>
-        <div style={{ fontFamily: MONO, fontSize: 10, color: "#44446a", marginBottom: 6, letterSpacing: "0.1em" }}>CAMELOT KEY</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 5 }}>
-          {CAMELOT.map(({ pos }) => (
-            <button key={pos} onClick={() => onInfoChange({ camelotPos: pos })}
-              style={{ width: 26, height: 22, background: info.camelotPos === pos ? color : color + "10", border: `1px solid ${info.camelotPos === pos ? color : color + "22"}`, color: info.camelotPos === pos ? BG : color + "88", fontFamily: MONO, fontSize: 10, fontWeight: 700, borderRadius: 3, cursor: "pointer", transition: "all 0.15s" }}>
-              {pos}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 3 }}>
-          {(["A", "B"] as KeyType[]).map(t => (
-            <button key={t} onClick={() => onInfoChange({ camelotType: t })}
-              style={{ flex: 1, height: 28, background: info.camelotType === t ? color : color + "10", border: `1px solid ${info.camelotType === t ? color : color + "22"}`, color: info.camelotType === t ? BG : color + "88", fontFamily: MONO, fontSize: 11, fontWeight: 700, borderRadius: 3, cursor: "pointer", transition: "all 0.15s" }}>
-              {t === "A" ? "A — MINOR" : "B — MAJOR"}
-            </button>
-          ))}
+
+        <div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: "#7a7aaa", marginBottom: 4, letterSpacing: "0.1em" }}>CAMELOT KEY</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 3, marginBottom: 5 }}>
+            {CAMELOT.map(({ pos }) => (
+              <button key={pos} onClick={() => onInfoChange({ camelotPos: pos })}
+                style={{ ...glossyBtn(color, info.camelotPos === pos), height: 22, fontSize: 9, fontWeight: 700, borderRadius: 4, padding: 0 }}>
+                {pos}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["A", "B"] as KeyType[]).map(t => (
+              <button key={t} onClick={() => onInfoChange({ camelotType: t })}
+                style={{ ...glossyBtn(color, info.camelotType === t), flex: 1, height: 26, fontSize: 10, fontWeight: 700 }}>
+                {t === "A" ? "A — MINOR" : "B — MAJOR"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── App ───────────────────────────────────────────────────────────────────────
+// ─── Window chrome (drag + fake OS controls) ─────────────────────────────────
+function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+// ─── App ─────────────────────────────────────────────────────────────────────
 const initDeck = (bpm: number, pos: number, type: KeyType): DeckInfo => ({
   camelotPos: pos, camelotType: type, bpm, tempo: 0, trackName: "", loaded: false,
 });
@@ -596,9 +720,17 @@ export default function App() {
   const [durA,    setDurA]    = useState(0);
   const [durB,    setDurB]    = useState(0);
   const [cf,      setCf]      = useState(50);
-  const [playing, setPlaying] = useState(false);
+  const [playingA, setPlayingA] = useState(false);
+  const [playingB, setPlayingB] = useState(false);
+  const playing = playingA || playingB;
+  const [maximized, setMaximized] = useState(true);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [checkpoints, setCheckpoints] = useState<{ id: number; tA: number; tB: number }[]>([]);
+  const cpIdRef = useRef(1);
+  const dragRef = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
   const audioARef = useRef<DeckAudio | null>(null);
   const audioBRef = useRef<DeckAudio | null>(null);
+  const clock = useClock();
 
   if (!audioARef.current && typeof AudioContext !== "undefined") {
     const ctx = getCtx();
@@ -612,22 +744,107 @@ export default function App() {
     audioBRef.current?.setCF(t > 0.5 ? 1 : t * 2);
   }, [cf]);
 
-  function masterToggle() {
-    const a = audioARef.current, b = audioBRef.current;
-    if (playing) {
-      a?.pause(); b?.pause(); setPlaying(false);
+  // Live refs so the keyboard listener (mounted once) never sees stale state.
+  const stateRef = useRef({ la: false, lb: false, pa: false, pb: false });
+  stateRef.current = { la: deckA.loaded, lb: deckB.loaded, pa: playingA, pb: playingB };
+
+  // Toggle a single deck's playback.
+  function toggleDeck(side: "A" | "B") {
+    const { la, lb, pa, pb } = stateRef.current;
+    if (side === "A") {
+      if (!la) return;
+      if (pa) { audioARef.current?.pause(); setPlayingA(false); }
+      else    { audioARef.current?.play();  setPlayingA(true); }
     } else {
-      if (deckA.loaded) a?.play();
-      if (deckB.loaded) b?.play();
-      setPlaying(true);
+      if (!lb) return;
+      if (pb) { audioBRef.current?.pause(); setPlayingB(false); }
+      else    { audioBRef.current?.play();  setPlayingB(true); }
     }
   }
+
+  // Master: if anything is playing → stop both; otherwise → start every loaded deck.
+  function masterToggle() {
+    const { la, lb, pa, pb } = stateRef.current;
+    if (pa || pb) {
+      audioARef.current?.pause(); audioBRef.current?.pause();
+      setPlayingA(false); setPlayingB(false);
+    } else {
+      if (la) { audioARef.current?.play(); setPlayingA(true); }
+      if (lb) { audioBRef.current?.play(); setPlayingB(true); }
+    }
+  }
+
+  // ── Checkpoints ────────────────────────────────────────────────────────────
+  // Enter snapshots both decks' current positions as one numbered checkpoint.
+  function addCheckpoint() {
+    const { la, lb } = stateRef.current;
+    if (!la && !lb) return;
+    const tA = audioARef.current?.currentTime() ?? 0;
+    const tB = audioBRef.current?.currentTime() ?? 0;
+    setCheckpoints(cs => [...cs, { id: cpIdRef.current++, tA, tB }]);
+  }
+  // Jump both decks to a checkpoint's positions — playback state is untouched.
+  function jumpCheckpoint(id: number) {
+    const cp = checkpoints.find(c => c.id === id);
+    if (!cp) return;
+    audioARef.current?.seek(cp.tA);
+    audioBRef.current?.seek(cp.tB);
+  }
+  // Sync B onto A using a checkpoint: at that CP both decks were meant to be at
+  // the same musical point, so shift B by the A/B offset recorded there.
+  function syncFromCheckpoint(id: number) {
+    const cp = checkpoints.find(c => c.id === id);
+    const b  = audioBRef.current;
+    if (!cp || !b) return;
+    b.seek(b.currentTime() + (cp.tA - cp.tB));
+  }
+  function removeCheckpoint(id: number) {
+    setCheckpoints(cs => cs.filter(c => c.id !== id));
+  }
+
+  // Keep a live ref for the keyboard handler (mounted once).
+  const cpRef = useRef<{ jump: (i: number) => void; add: () => void }>({ jump: () => {}, add: () => {} });
+  cpRef.current = {
+    add: addCheckpoint,
+    jump: (idx: number) => { const cp = checkpoints[idx]; if (cp) jumpCheckpoint(cp.id); },
+  };
+
+  // Keyboard: Space = master, A = deck A, D = deck B, Enter = checkpoint,
+  // 1-9 = jump to checkpoint N (ignored while typing in a field).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === "Space" || e.key === " ") { e.preventDefault(); masterToggle(); return; }
+      if (e.key === "Enter") { e.preventDefault(); cpRef.current.add(); return; }
+      if (e.key >= "1" && e.key <= "9") { e.preventDefault(); cpRef.current.jump(+e.key - 1); return; }
+      if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft")  { e.preventDefault(); toggleDeck("A"); return; }
+      if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") { e.preventDefault(); toggleDeck("B"); return; }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function syncBpm() {
     const target = deckA.bpm * (1 + deckA.tempo / 100);
     const needed = ((target / deckB.bpm) - 1) * 100;
     setDeckB(d => ({ ...d, tempo: parseFloat(Math.max(-8, Math.min(8, needed)).toFixed(1)) }));
   }
+
+  function onTitleDown(e: React.PointerEvent) {
+    if (maximized) return;
+    dragRef.current = { sx: e.clientX, sy: e.clientY, px: pos.x, py: pos.y };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onTitleMove(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d) return;
+    setPos({ x: d.px + (e.clientX - d.sx), y: d.py + (e.clientY - d.sy) });
+  }
+  function onTitleUp() { dragRef.current = null; }
 
   const compat = getCompat(deckA.camelotPos, deckA.camelotType, deckB.camelotPos, deckB.camelotType);
   const cc     = compatColor(compat);
@@ -637,108 +854,292 @@ export default function App() {
   const keyA   = CAMELOT.find(c => c.pos === deckA.camelotPos)?.[deckA.camelotType] ?? "";
   const keyB   = CAMELOT.find(c => c.pos === deckB.camelotPos)?.[deckB.camelotType] ?? "";
 
+  const winStyle: React.CSSProperties = maximized
+    ? { position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)",
+        width: "calc(100vw - 16px)", maxWidth: 1600,
+        height: "calc(100vh - 50px)", maxHeight: 820 }
+    : { position: "absolute", left: "50%", top: "50%",
+        width: "min(1200px, 94vw)", height: "min(720px, 88vh)",
+        transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))` };
+
   return (
-    <div style={{ background: BG, height: "100vh", color: "#e8e8f0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ borderBottom: "1px solid #12122a", padding: "9px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <Music size={17} style={{ color: CA }} />
-          <span style={{ fontFamily: COND, fontSize: 21, fontWeight: 800, letterSpacing: "0.22em", color: "#e8e8f0" }}>CAMELOT DJ</span>
+    <div style={{ ...desktopBg, position: "fixed", inset: 0, overflow: "hidden", fontFamily: UI }}>
+      {/* floating desktop bubbles (Frutiger Aero) */}
+      {[
+        { s: 220, l: "6%",  t: "10%", d: 26 },
+        { s: 140, l: "82%", t: "18%", d: 32 },
+        { s: 90,  l: "70%", t: "70%", d: 20 },
+        { s: 160, l: "20%", t: "68%", d: 38 },
+      ].map((b, i) => (
+        <div key={i} style={{
+          position: "absolute", left: b.l, top: b.t, width: b.s, height: b.s, borderRadius: "50%",
+          background: "radial-gradient(circle at 32% 30%, rgba(255,255,255,0.5), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0) 70%)",
+          filter: "blur(0.5px)", pointerEvents: "none",
+          animation: `float-${i % 2} ${b.d}s ease-in-out infinite alternate`,
+        }} />
+      ))}
+
+      {/* ── The Aero window ── */}
+      <div style={{
+        ...winStyle,
+        display: "flex", flexDirection: "column",
+        borderRadius: 12, overflow: "hidden",
+        ...glass("rgba(12,16,32,0.72)"),
+      }}>
+        {/* title bar */}
+        <div
+          onPointerDown={onTitleDown}
+          onPointerMove={onTitleMove}
+          onPointerUp={onTitleUp}
+          onDoubleClick={() => setMaximized(m => !m)}
+          style={{
+            ...titleBar("#2f6fbf"),
+            height: 28, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "0 6px 0 12px",
+            cursor: maximized ? "default" : "grab",
+            userSelect: "none",
+          }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Music size={14} />
+            <span style={{ fontFamily: COND, fontSize: 15, fontWeight: 800, letterSpacing: "0.24em" }}>CAMELOT DJ</span>
+            <span style={{ fontFamily: MONO, fontSize: 9, opacity: 0.75, marginLeft: 6 }}>harmonic mixer</span>
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[
+              { icon: <Minus size={11} />, key: "min" },
+              { icon: <Square size={9} />, key: "max", onClick: () => setMaximized(m => !m) },
+              { icon: <X size={11} />, key: "close" },
+            ].map(b => (
+              <button key={b.key} onClick={b.onClick}
+                style={{
+                  width: 24, height: 19, borderRadius: 5,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#fff", cursor: "pointer",
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: b.key === "close"
+                    ? "linear-gradient(180deg, #ff8a7a, #d63a2a 55%, #b52a1c)"
+                    : "linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0.08) 55%, rgba(0,0,0,0.15))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.4)",
+                }}>
+                {b.icon}
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: cc, boxShadow: `0 0 8px ${cc}` }} />
-          <span style={{ fontFamily: MONO, fontSize: 11, color: cc, letterSpacing: "0.12em" }}>{compat}</span>
+
+        {/* status strip */}
+        <div style={{
+          flexShrink: 0, height: 24, display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "0 14px",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.10))",
+          borderBottom: "1px solid rgba(255,255,255,0.12)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: cc, boxShadow: `0 0 10px ${cc}` }} />
+            <span style={{ fontFamily: MONO, fontSize: 10, color: cc, letterSpacing: "0.14em", textShadow: `0 0 8px ${cc}88` }}>{compat}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, fontFamily: MONO, fontSize: 9, color: "#9aa2c8" }}>
+            <span>A {keyA} · {Math.round(effA)} BPM</span>
+            <Link2 size={10} style={{ color: "#5a6088" }} />
+            <span>B {keyB} · {Math.round(effB)} BPM</span>
+          </div>
+        </div>
+
+        {/* body */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: BG }}>
+          <TransitionView
+            peaksA={peaksA} peaksB={peaksB}
+            durationA={durA} durationB={durB}
+            bpmA={effA} bpmB={effB}
+            loadedA={deckA.loaded} loadedB={deckB.loaded}
+            audioARef={audioARef} audioBRef={audioBRef}
+          />
+          <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 272px 1fr", minHeight: 0 }}>
+            <div style={{ minHeight: 0 }}>
+              <DeckPanel side="A" color={CA} info={deckA}
+                onInfoChange={p => setDeckA(d => ({ ...d, ...p }))}
+                audioRef={audioARef}
+                onLoad={(pk, dur) => { setPeaksA(pk); setDurA(dur); }}
+                playing={playingA} onToggle={() => toggleDeck("A")} />
+            </div>
+
+            {/* ── Mixer column ── */}
+            <div style={{ ...chromeFrame, margin: 6, display: "flex", flexDirection: "column", overflow: "hidden", height: "calc(100% - 12px)" }}>
+              <Caption text="MIXER" accent="#3a3f66" />
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, padding: "8px 12px", flex: 1, minHeight: 0 }}>
+                <CamelotWheel aPos={deckA.camelotPos} aType={deckA.camelotType} bPos={deckB.camelotPos} bType={deckB.camelotType} />
+
+                <button onClick={masterToggle}
+                  disabled={!deckA.loaded && !deckB.loaded}
+                  style={{
+                    position: "relative",
+                    width: 54, height: 54, borderRadius: "50%",
+                    border: `2px solid ${playing ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.25)"}`,
+                    background: playing
+                      ? `radial-gradient(circle at 50% 30%, #ffffff55, ${CA} 45%, ${CB} 100%)`
+                      : "radial-gradient(circle at 50% 30%, rgba(255,255,255,0.3), #2a3050 55%, #171c30)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: (!deckA.loaded && !deckB.loaded) ? "not-allowed" : "pointer",
+                    transition: "all 0.2s",
+                    boxShadow: playing
+                      ? `0 0 28px ${CA}66, 0 0 28px ${CB}66, inset 0 2px 4px rgba(255,255,255,0.5)`
+                      : "0 4px 12px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,255,255,0.25)",
+                    opacity: (!deckA.loaded && !deckB.loaded) ? 0.4 : 1,
+                    flexShrink: 0,
+                  }}>
+                  <span style={orbSheen} />
+                  {playing ? <Pause size={22} color="#fff" /> : <Play size={22} color="#fff" />}
+                </button>
+
+                <div style={{ display: "flex", gap: 6, width: "100%", alignItems: "center" }}>
+                  <div style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderRadius: 8, ...well }}>
+                    <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: CA, textShadow: `0 0 10px ${CA}66` }}>{deckA.camelotPos}{deckA.camelotType}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: CA + "99", marginTop: 1 }}>{keyA}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: "#6a6a9a" }}>DIFF</div>
+                    <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: parseFloat(diff) < 1 ? "#00ff9d" : parseFloat(diff) < 4 ? "#ffd700" : "#ff4455" }}>{diff}</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderRadius: 8, ...well }}>
+                    <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: CB, textShadow: `0 0 10px ${CB}66` }}>{deckB.camelotPos}{deckB.camelotType}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: CB + "99", marginTop: 1 }}>{keyB}</div>
+                  </div>
+                </div>
+
+                <div style={{ width: "100%", padding: "5px 12px", borderRadius: 8, ...well, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: CA }}>{Math.round(effA)}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: cc, letterSpacing: "0.14em", textShadow: `0 0 8px ${cc}88` }}>{compat}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: CB }}>{Math.round(effB)}</span>
+                </div>
+
+                <button onClick={syncBpm}
+                  style={{ ...glossyBtn("#c9a227"), width: "100%", padding: "7px", fontSize: 10,
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <Zap size={11} /> SYNC BPM A → B
+                </button>
+
+                <div style={{ width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: CA }}>A</span>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: "#6a6a9a" }}>CROSSFADER</span>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: CB }}>B</span>
+                  </div>
+                  <div onDoubleClick={() => setCf(50)} title="double-click to center"
+                    style={{ position: "relative", height: 26, display: "flex", alignItems: "center" }}>
+                    <div style={{ position: "absolute", left: 0, right: 0, height: 10, borderRadius: 5, ...well }} />
+                    <div style={{ position: "absolute", left: 0, right: 0, height: 10, borderRadius: 5,
+                      background: `linear-gradient(to right, ${CA}, transparent 42%, transparent 58%, ${CB})`, opacity: 0.5 }} />
+                    <input type="range" min={0} max={100} value={cf} onChange={e => setCf(+e.target.value)}
+                      onDoubleClick={() => setCf(50)}
+                      style={{ position: "absolute", left: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }} />
+                    <div style={{ position: "absolute", left: `calc(${cf}% - 11px)`, width: 22, height: 26, borderRadius: 6,
+                      background: "linear-gradient(180deg, #ffffff, #c2c8dc 50%, #7d8399)",
+                      border: "1px solid rgba(0,0,0,0.45)",
+                      boxShadow: "0 3px 10px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -2px 4px rgba(0,0,0,0.3)",
+                      pointerEvents: "none", transition: "left 0.04s" }} />
+                  </div>
+                </div>
+
+                <button onClick={() => setCf(50)}
+                  style={{ ...glossyBtn("#3a3f66"), padding: "5px 16px", fontSize: 9 }}>
+                  CENTER
+                </button>
+
+                {/* ── Checkpoints ── */}
+                <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", ...well, borderRadius: 8, padding: "6px 8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: "#7a7aaa", letterSpacing: "0.12em" }}>
+                      CHECKPOINTS
+                    </span>
+                    <button onClick={addCheckpoint}
+                      disabled={!deckA.loaded && !deckB.loaded}
+                      title="mark checkpoint (Enter)"
+                      style={{ ...glossyBtn("#3a7bd5"), padding: "2px 8px", fontSize: 8, letterSpacing: "0.1em",
+                        opacity: (!deckA.loaded && !deckB.loaded) ? 0.4 : 1 }}>
+                      + SET · ⏎
+                    </button>
+                  </div>
+                  <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {checkpoints.length === 0 && (
+                      <span style={{ fontFamily: MONO, fontSize: 8, color: "#4a4a70", lineHeight: 1.5 }}>
+                        press ⏎ to snapshot both decks · keys 1-9 jump
+                      </span>
+                    )}
+                    {checkpoints.map((cp, i) => (
+                      <div key={cp.id} style={{
+                        display: "grid", gridTemplateColumns: "auto 1fr auto auto auto", alignItems: "center", gap: 5,
+                        padding: "3px 5px", borderRadius: 5,
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                      }}>
+                        <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: "#8a92c8" }}>
+                          {i + 1 <= 9 ? i + 1 : "·"}
+                        </span>
+                        <span style={{ fontFamily: MONO, fontSize: 8, color: "#7a7aaa" }}>
+                          <span style={{ color: CA }}>{cp.tA.toFixed(1)}</span>
+                          {" / "}
+                          <span style={{ color: CB }}>{cp.tB.toFixed(1)}</span>
+                        </span>
+                        <button onClick={() => jumpCheckpoint(cp.id)} title="jump both decks here"
+                          style={{ ...glossyBtn("#3a7bd5"), width: 22, height: 18, fontSize: 10, padding: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center" }}>↦</button>
+                        <button onClick={() => syncFromCheckpoint(cp.id)} title="sync B onto A using this checkpoint"
+                          style={{ ...glossyBtn("#c9a227"), width: 22, height: 18, fontSize: 10, padding: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center" }}>⇄</button>
+                        <button onClick={() => removeCheckpoint(cp.id)} title="delete"
+                          style={{ ...glossyBtn("#7a3a3a"), width: 22, height: 18, fontSize: 9, padding: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ minHeight: 0 }}>
+              <DeckPanel side="B" color={CB} info={deckB}
+                onInfoChange={p => setDeckB(d => ({ ...d, ...p }))}
+                audioRef={audioBRef}
+                onLoad={(pk, dur) => { setPeaksB(pk); setDurB(dur); }}
+                playing={playingB} onToggle={() => toggleDeck("B")} />
+            </div>
+          </div>
         </div>
       </div>
-      <TransitionView
-        peaksA={peaksA} peaksB={peaksB}
-        durationA={durA} durationB={durB}
-        bpmA={effA} bpmB={effB}
-        loadedA={deckA.loaded} loadedB={deckB.loaded}
-        audioARef={audioARef} audioBRef={audioBRef}
-      />
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 248px 1fr", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ borderRight: `1px solid ${CA}14`, overflowY: "auto" }}>
-          <DeckPanel side="A" color={CA} info={deckA}
-            onInfoChange={p => setDeckA(d => ({ ...d, ...p }))}
-            audioRef={audioARef}
-            onLoad={(pk, dur) => { setPeaksA(pk); setDurA(dur); }}
-            playing={playing} />
-        </div>
-        <div style={{ borderRight: `1px solid ${CB}14`, padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, overflowY: "auto" }}>
-          <CamelotWheel aPos={deckA.camelotPos} aType={deckA.camelotType} bPos={deckB.camelotPos} bType={deckB.camelotType} />
-          <button onClick={masterToggle}
-            disabled={!deckA.loaded && !deckB.loaded}
-            style={{
-              width: 64, height: 64, borderRadius: "50%",
-              background: playing ? `linear-gradient(135deg, ${CA}cc, ${CB}cc)` : `linear-gradient(135deg, ${CA}22, ${CB}22)`,
-              border: `2px solid ${playing ? "#ffffff44" : "#333358"}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: (!deckA.loaded && !deckB.loaded) ? "not-allowed" : "pointer",
-              transition: "all 0.2s",
-              boxShadow: playing ? `0 0 24px ${CA}44, 0 0 24px ${CB}44` : "none",
-              opacity: (!deckA.loaded && !deckB.loaded) ? 0.35 : 1,
-              flexShrink: 0,
-            }}>
-            {playing ? <Pause size={26} color="#ffffff" /> : <Play size={26} color="#ffffff" />}
-          </button>
-          <div style={{ padding: "4px 16px", borderRadius: 20, background: cc + "16", border: `1px solid ${cc}40`, fontFamily: MONO, fontSize: 11, color: cc, letterSpacing: "0.15em" }}>
-            {compat}
-          </div>
-          <div style={{ display: "flex", gap: 5, width: "100%", alignItems: "center" }}>
-            <div style={{ flex: 1, textAlign: "center", padding: "7px 4px", borderRadius: 6, background: CA + "0e", border: `1px solid ${CA}22` }}>
-              <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: CA }}>{deckA.camelotPos}{deckA.camelotType}</div>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: CA + "70", marginTop: 2 }}>{keyA}</div>
-            </div>
-            <Link2 size={12} style={{ color: "#33335a", flexShrink: 0 }} />
-            <div style={{ flex: 1, textAlign: "center", padding: "7px 4px", borderRadius: 6, background: CB + "0e", border: `1px solid ${CB}22` }}>
-              <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: CB }}>{deckB.camelotPos}{deckB.camelotType}</div>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: CB + "70", marginTop: 2 }}>{keyB}</div>
-            </div>
-          </div>
-          <div style={{ width: "100%", padding: "7px 10px", borderRadius: 6, background: "#0e0e20", border: "1px solid #1a1a35", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: "#44446a" }}>A</div>
-              <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: CA }}>{Math.round(effA)}</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: "#44446a" }}>DIFF</div>
-              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: parseFloat(diff) < 1 ? "#00ff9d" : parseFloat(diff) < 4 ? "#ffd700" : "#ff4455" }}>{diff}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: "#44446a" }}>B</div>
-              <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: CB }}>{Math.round(effB)}</div>
-            </div>
-          </div>
-          <button onClick={syncBpm}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#ffd70028"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "#ffd70014"; }}
-            style={{ width: "100%", padding: "8px", borderRadius: 6, background: "#ffd70014", border: "1px solid #ffd70038", color: "#ffd700", fontFamily: MONO, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", letterSpacing: "0.1em", transition: "background 0.18s" }}>
-            <Zap size={12} /> SYNC BPM A → B
-          </button>
-          <div style={{ width: "100%" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
-              <span style={{ fontFamily: MONO, fontSize: 9, color: CA }}>A</span>
-              <span style={{ fontFamily: MONO, fontSize: 9, color: "#44446a" }}>CROSSFADER</span>
-              <span style={{ fontFamily: MONO, fontSize: 9, color: CB }}>B</span>
-            </div>
-            <div style={{ position: "relative", height: 28, display: "flex", alignItems: "center" }}>
-              <div style={{ position: "absolute", left: 0, right: 0, height: 6, borderRadius: 3, background: `linear-gradient(to right, ${CA}, #1a1a35 40%, #1a1a35 60%, ${CB})` }} />
-              <input type="range" min={0} max={100} value={cf} onChange={e => setCf(+e.target.value)}
-                style={{ position: "absolute", left: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }} />
-              <div style={{ position: "absolute", left: `calc(${cf}% - 10px)`, width: 20, height: 28, borderRadius: 4, background: "#c8c8e0", border: "2px solid #555577", boxShadow: "0 2px 8px rgba(0,0,0,0.6)", pointerEvents: "none", transition: "left 0.04s" }} />
-            </div>
-          </div>
-          <button onClick={() => setCf(50)}
-            style={{ padding: "5px 14px", borderRadius: 4, background: "#12122a", border: "1px solid #1a1a35", color: "#44446a", fontFamily: MONO, fontSize: 10, cursor: "pointer" }}>
-            CENTER
-          </button>
-        </div>
-        <div style={{ overflowY: "auto" }}>
-          <DeckPanel side="B" color={CB} info={deckB}
-            onInfoChange={p => setDeckB(d => ({ ...d, ...p }))}
-            audioRef={audioBRef}
-            onLoad={(pk, dur) => { setPeaksB(pk); setDurB(dur); }}
-            playing={playing} />
+
+      {/* ── Taskbar ── */}
+      <div style={{
+        position: "absolute", left: 0, right: 0, bottom: 0, height: 34,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 8px",
+        background: "linear-gradient(180deg, #3a7bd5 0%, #2a5fb0 6%, #16396e 55%, #0d2140 100%)",
+        borderTop: "1px solid rgba(255,255,255,0.4)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5), 0 -2px 10px rgba(0,0,0,0.4)",
+      }}>
+        <button style={{
+          display: "flex", alignItems: "center", gap: 7, height: 26, padding: "0 16px 0 10px",
+          borderRadius: "6px 14px 14px 6px", cursor: "pointer",
+          border: "1px solid rgba(255,255,255,0.35)",
+          background: "linear-gradient(180deg, #7dd36a 0%, #3fa02f 45%, #2f7f22 55%, #256b1c 100%)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.4)",
+          color: "#fff", fontFamily: COND, fontSize: 15, fontWeight: 800, fontStyle: "italic",
+          textShadow: "0 1px 2px rgba(0,0,0,0.5)", letterSpacing: "0.04em",
+        }}>
+          <Music size={15} /> start
+        </button>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6, height: 24, padding: "0 12px",
+          borderRadius: 5, color: "#dfe7ff", fontFamily: MONO, fontSize: 10,
+          border: "1px solid rgba(255,255,255,0.2)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.15), rgba(0,0,0,0.15))",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)",
+        }}>
+          {playing
+            ? <><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#5dff9d", boxShadow: "0 0 8px #5dff9d" }} /> MIXING</>
+            : <>IDLE</>}
+          <span style={{ marginLeft: 8, opacity: 0.85 }}>
+            {clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
         </div>
       </div>
     </div>

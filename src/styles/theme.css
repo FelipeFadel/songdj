@@ -1,0 +1,39 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #07070f;
+  color: #fff;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* deck level-meter bounce */
+@keyframes bounce-0 { from { height: 20%; } to { height: 70%; } }
+@keyframes bounce-1 { from { height: 30%; } to { height: 95%; } }
+@keyframes bounce-2 { from { height: 40%; } to { height: 100%; } }
+@keyframes bounce-3 { from { height: 30%; } to { height: 85%; } }
+@keyframes bounce-4 { from { height: 20%; } to { height: 60%; } }
+
+/* Frutiger Aero desktop bubbles */
+@keyframes float-0 {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(24px, -32px) scale(1.06); }
+}
+@keyframes float-1 {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-28px, 26px) scale(0.94); }
+}
+
+/* range thumbs — keep native controls glossy where they show through */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
