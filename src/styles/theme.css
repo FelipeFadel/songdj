@@ -30,6 +30,12 @@ body {
   from { transform: translate(0, 0) scale(1); }
   to   { transform: translate(-28px, 26px) scale(0.94); }
 }
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
 /* range thumbs — keep native controls glossy where they show through */
 input[type="range"] {

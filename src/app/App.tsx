@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, type DragEvent } from "react";
-import { Play, Pause, Upload, Zap, Link2, Music, Minus, Square, X, Disc3 } from "lucide-react";
+import { Play, Pause, Upload, Zap, Link2, Music, Music2, Minus, Square, X, Disc3, Youtube, FileAudio } from "lucide-react";
 import {
   CA, CB, BG, MONO, COND, UI,
   desktopBg, glass, well, glossyBtn, orbSheen, chromeFrame, titleBar,
 } from "./aero";
 import demoDuelUrl from "../assets/demo/duel-of-the-fates.mp3";
 import demoFlexUrl from "../assets/demo/flex-up.mp3";
+import { detectBpm } from "./bpm-detector";
+import { YouTubeController, YouTubeState, parseYouTubeUrl } from "./youtube";
 
 // ─── Camelot data ──────────────────────────────────────────────────────────────
 const CAMELOT = [
@@ -25,6 +27,8 @@ const CAMELOT = [
 
 type KeyType = "A" | "B";
 
+type DeckSource = "local" | "youtube";
+
 interface DeckInfo {
   camelotPos:  number;
   camelotType: KeyType;
@@ -32,6 +36,7 @@ interface DeckInfo {
   tempo:       number;
   trackName:   string;
   loaded:      boolean;
+  source:      DeckSource;
 }
 
 // ─── Demo tracks ──────────────────────────────────────────────────────────────
@@ -230,7 +235,7 @@ function CamelotWheel({ aPos, aType, bPos, bType }: {
 function TransitionView({
   peaksA, peaksB, durationA, durationB,
   bpmA, bpmB, loadedA, loadedB,
-  audioARef, audioBRef,
+  audioARef, audioBRef, checkpoints,
 }: {
   peaksA: number[]; peaksB: number[];
   durationA: number; durationB: number;
@@ -238,10 +243,16 @@ function TransitionView({
   loadedA: boolean; loadedB: boolean;
   audioARef: React.RefObject<DeckAudio | null>;
   audioBRef: React.RefObject<DeckAudio | null>;
+  checkpoints: { id: number; tA: number; tB: number }[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef   = useRef<{ which: "A" | "B"; startX: number; startT: number } | null>(null);
   const [winSec,  setWinSec]  = useState(8);
+
+  // Live ref so the rAF draw loop always sees the current checkpoint list
+  // without the effect below having to re-subscribe on every change.
+  const cpRef = useRef(checkpoints);
+  cpRef.current = checkpoints;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -335,6 +346,33 @@ function TransitionView({
 
       drawBeats(bpmA, tA, gapY,                Math.floor(gapH / 2), CA);
       drawBeats(bpmB, tB, gapY + Math.ceil(gapH / 2), Math.floor(gapH / 2), CB);
+
+      // Saved checkpoint positions — one vertical line per deck track, drawn
+      // where that deck's stored time currently sits in its scrolling window.
+      function drawCheckpoint(savedT: number, currentT: number, yTop: number, h: number, color: string, label: string) {
+        const x = W / 2 + (savedT - currentT) * pxPerSec;
+        if (x < 0 || x > W) return;
+        ctx.save();
+        ctx.shadowColor = color;
+        ctx.shadowBlur  = 8;
+        ctx.fillStyle   = color;
+        ctx.fillRect(x - 1, yTop, 2, h);
+        ctx.restore();
+        // flag tab at the top of the track
+        ctx.fillStyle = color;
+        ctx.fillRect(x - 1, yTop, 12, 9);
+        ctx.fillStyle = "#060612";
+        ctx.font = `700 7px ${MONO}`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText(label, x + 1.5, yTop + 1.5);
+      }
+      for (let i = 0; i < cpRef.current.length; i++) {
+        const cp  = cpRef.current[i];
+        const lbl = String(i + 1);
+        if (loadedA) drawCheckpoint(cp.tA, tA, 0,  trkH, CA, lbl);
+        if (loadedB) drawCheckpoint(cp.tB, tB, bY, trkH, CB, lbl);
+      }
 
       ctx.fillStyle = CA + "28";
       ctx.fillRect(0, gapY, W, 1);
@@ -504,14 +542,177 @@ function Caption({ text, accent, right }: { text: string; accent: string; right?
   );
 }
 
+// ─── YouTube deck body ───────────────────────────────────────────────────────
+// Mounted when a deck's source is "youtube". Owns a YouTubeController and the
+// link box / transport / playlist nav. No waveform, EQ, tempo or BPM — the
+// audio lives in a cross-origin iframe we can't tap.
+function YouTubeDeckBody({ side, color, info, onInfoChange, onPlayingChange, ctrlRef, vol, setVol }: {
+  side: "A" | "B"; color: string;
+  info: DeckInfo; onInfoChange: (p: Partial<DeckInfo>) => void;
+  onPlayingChange: (playing: boolean) => void;
+  ctrlRef: React.MutableRefObject<YouTubeController | null>;
+  vol: number; setVol: (v: number) => void;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [link, setLink] = useState("");
+  const [yt, setYt] = useState<YouTubeState>({
+    ready: false, playing: false, duration: 0, title: "", index: -1, listCount: 0,
+  });
+  const [err, setErr] = useState("");
+
+  // Create the controller once the host div exists.
+  useEffect(() => {
+    if (!hostRef.current || ctrlRef.current) return;
+    const c = new YouTubeController(hostRef.current);
+    ctrlRef.current = c;
+    const off = c.onChange(setYt);
+    return () => { off(); c.destroy(); ctrlRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep player volume in sync with the deck's volume slider.
+  useEffect(() => { ctrlRef.current?.setVol(vol / 100); }, [vol, ctrlRef]);
+
+  // Push YouTube's ready / title state up into the shared DeckInfo so the rest
+  // of the app (status strip, master toggle) sees a loaded, named deck.
+  useEffect(() => {
+    onInfoChange({
+      loaded: yt.ready,
+      trackName: yt.title || (yt.ready ? "YouTube" : ""),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yt.ready, yt.title]);
+
+  // Mirror the player's own play/pause (the user can drive it from inside the
+  // iframe too) into the deck's playing state.
+  useEffect(() => {
+    onPlayingChange(yt.playing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yt.playing]);
+
+  function submit() {
+    const parsed = parseYouTubeUrl(link);
+    if (parsed.kind === "invalid") { setErr("Link do YouTube inválido"); return; }
+    setErr("");
+    ctrlRef.current?.load(parsed);
+  }
+
+  const c   = ctrlRef.current;
+  const cur = c?.currentTime() ?? 0;
+  const dur = yt.duration || 0;
+  const pct = dur ? (cur / dur) * 100 : 0;
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60);
+    const r = Math.floor(s % 60);
+    return `${m}:${r.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 12px 10px", flex: 1, minHeight: 0, overflowY: "auto" }}>
+      {/* link box */}
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          value={link}
+          onChange={e => setLink(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") submit(); }}
+          placeholder="cole link de vídeo ou playlist do YouTube"
+          style={{
+            flex: 1, background: "rgba(0,0,0,0.4)", border: `1px solid ${color}55`,
+            borderRadius: 6, color: "#dfe7ff", fontFamily: MONO, fontSize: 9,
+            padding: "6px 8px", outline: "none",
+          }}
+        />
+        <button onClick={submit}
+          style={{ ...glossyBtn(side === "A" ? "#1f6fae" : "#c85a1e"), padding: "0 14px", height: 30, fontSize: 9 }}>
+          LOAD
+        </button>
+      </div>
+      {err && <span style={{ fontFamily: MONO, fontSize: 8, color: "#ff6a6a" }}>{err}</span>}
+
+      {/* the actual iframe — kept small; audio is what matters here */}
+      <div style={{ borderRadius: 8, overflow: "hidden", ...well, aspectRatio: "16 / 9", position: "relative" }}>
+        <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
+        {!yt.ready && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: MONO, fontSize: 9, color: "#5a5a8a" }}>
+            {link ? "carregando…" : "sem vídeo"}
+          </div>
+        )}
+      </div>
+
+      {/* now playing */}
+      <div style={{ padding: "6px 10px", borderRadius: 8, ...well }}>
+        <div style={{ fontFamily: MONO, fontSize: 8, color: "#6a6a9a", letterSpacing: "0.12em", marginBottom: 2 }}>
+          TOCANDO {yt.listCount > 0 && <span style={{ color: color + "aa" }}>· {yt.index + 1}/{yt.listCount}</span>}
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 10, color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {yt.title || "—"}
+        </div>
+      </div>
+
+      {/* transport */}
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={() => c?.prev()} disabled={yt.listCount === 0}
+          style={{ ...glossyBtn("#3a3f66"), flex: 1, height: 28, fontSize: 11, opacity: yt.listCount ? 1 : 0.35 }}>
+          ⏮
+        </button>
+        <button onClick={() => (yt.playing ? c?.pause() : c?.play())} disabled={!yt.ready}
+          style={{ ...glossyBtn(color, yt.playing), flex: 2, height: 28, fontSize: 10,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: yt.ready ? 1 : 0.35 }}>
+          {yt.playing ? <Pause size={11} /> : <Play size={11} />} {yt.playing ? "PAUSE" : "PLAY"}
+        </button>
+        <button onClick={() => c?.next()} disabled={yt.listCount === 0}
+          style={{ ...glossyBtn("#3a3f66"), flex: 1, height: 28, fontSize: 11, opacity: yt.listCount ? 1 : 0.35 }}>
+          ⏭
+        </button>
+      </div>
+
+      {/* seek bar */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, fontFamily: MONO, fontSize: 8, color: "#7a7aaa" }}>
+          <span>{fmt(cur)}</span><span>{fmt(dur)}</span>
+        </div>
+        <div
+          onPointerDown={e => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const f = (e.clientX - rect.left) / rect.width;
+            if (dur) c?.seek(f * dur);
+          }}
+          style={{ position: "relative", height: 14, display: "flex", alignItems: "center", cursor: "pointer" }}>
+          <div style={{ position: "absolute", left: 0, right: 0, height: 8, borderRadius: 4, ...well }} />
+          <div style={{ position: "absolute", left: 0, width: `${pct}%`, height: 8, borderRadius: 4,
+            background: `linear-gradient(180deg, ${color}, ${color}88)`, boxShadow: `0 0 10px ${color}66` }} />
+        </div>
+      </div>
+
+      {/* volume */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: "#7a7aaa" }}>VOLUME</span>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: color + "cc" }}>{vol}%</span>
+        </div>
+        <SRange min={0} max={100} value={vol} onChange={setVol} color={color} pct={vol} reset={80} />
+      </div>
+
+      <div style={{ fontFamily: MONO, fontSize: 8, color: "#4a4a70", lineHeight: 1.5 }}>
+        modo YouTube: sem waveform, BPM, EQ ou crossfader — o áudio fica no player.
+        controle a mixagem pelo volume e de ouvido.
+      </div>
+    </div>
+  );
+}
+
 // ─── Deck panel ───────────────────────────────────────────────────────────────
-function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing, onToggle }: {
+function DeckPanel({ side, color, info, onInfoChange, audioRef, ytRef, onLoad, playing, onToggle, onSourceChange, onPlayingChange }: {
   side: "A" | "B"; color: string;
   info: DeckInfo; onInfoChange: (p: Partial<DeckInfo>) => void;
   audioRef: React.RefObject<DeckAudio | null>;
+  ytRef: React.MutableRefObject<YouTubeController | null>;
   onLoad: (peaks: number[], duration: number) => void;
   playing: boolean;
   onToggle: () => void;
+  onSourceChange: (s: DeckSource) => void;
+  onPlayingChange: (playing: boolean) => void;
 }) {
   const [vol, setVol] = useState(80);
   const [eqLo,    setEqLo]    = useState(0);
@@ -525,14 +726,33 @@ function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing,
   useEffect(() => { audioRef.current?.setEQ(eqLo, eqMi, eqHi); }, [eqLo, eqMi, eqHi, audioRef]);
 
   const [loadingDemo, setLoadingDemo] = useState(false);
+  const [bpmDetecting, setBpmDetecting] = useState(false);
+  // Bumped on every load so a slow analysis from a previous track can't write
+  // its BPM onto whatever got loaded after it.
+  const loadTokenRef = useRef(0);
 
   async function loadFile(file: File, extra?: Partial<DeckInfo>) {
     const audio = audioRef.current;
     if (!audio) return;
+    const token = ++loadTokenRef.current;
     try {
       const buf = await audio.load(file);
+      if (token !== loadTokenRef.current) return;
       onLoad(computePeaks(buf, 4000), buf.duration);
       onInfoChange({ trackName: file.name.replace(/\.[^.]+$/, ""), loaded: true, ...extra });
+
+      // Analyse the real tempo in a worker; overwrite the placeholder/demo BPM
+      // once we have a usable estimate.
+      setBpmDetecting(true);
+      detectBpm(buf)
+        .then(res => {
+          if (token !== loadTokenRef.current) return;
+          if (res.bpm >= 60 && res.bpm <= 200 && res.confidence >= 0.12) {
+            onInfoChange({ bpm: res.bpm });
+          }
+        })
+        .catch(e => console.error("BPM detect failed:", e))
+        .finally(() => { if (token === loadTokenRef.current) setBpmDetecting(false); });
     } catch (e) { console.error("Decode error:", e); }
   }
 
@@ -564,6 +784,24 @@ function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing,
         accent={side === "A" ? "#1f6fae" : "#c85a1e"}
         right={
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 9, letterSpacing: "0.15em" }}>
+            {/* source toggle: local file vs YouTube */}
+            <span style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid rgba(255,255,255,0.25)" }}>
+              {([["local", FileAudio], ["youtube", Youtube]] as const).map(([s, Icon]) => (
+                <button key={s}
+                  onClick={e => { e.stopPropagation(); if (info.source !== s) onSourceChange(s); }}
+                  title={s === "local" ? "arquivo local" : "YouTube"}
+                  style={{
+                    width: 24, height: 18, padding: 0, border: "none", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: info.source === s ? "#fff" : "#8a92c8",
+                    background: info.source === s
+                      ? `linear-gradient(180deg, #ffffff44, ${color}cc)`
+                      : "rgba(0,0,0,0.25)",
+                  }}>
+                  <Icon size={11} />
+                </button>
+              ))}
+            </span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: playing ? color : "#556",
                 boxShadow: playing ? `0 0 8px ${color}` : "none" }} />
@@ -590,6 +828,13 @@ function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing,
           </span>
         }
       />
+      {info.source === "youtube" ? (
+        <YouTubeDeckBody
+          side={side} color={color} info={info}
+          onInfoChange={onInfoChange} onPlayingChange={onPlayingChange}
+          ctrlRef={ytRef} vol={vol} setVol={setVol}
+        />
+      ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 12px 10px", flex: 1, minHeight: 0, justifyContent: "space-between", overflowY: "auto" }}>
         <div
           onDrop={handleDrop}
@@ -613,7 +858,12 @@ function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing,
 
         <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "6px 12px", borderRadius: 8, ...well }}>
           <div>
-            <div style={{ fontFamily: MONO, fontSize: 8, color: "#6a6a9a", marginBottom: 1, letterSpacing: "0.12em" }}>BPM</div>
+            <div style={{ fontFamily: MONO, fontSize: 8, color: "#6a6a9a", marginBottom: 1, letterSpacing: "0.12em", display: "flex", alignItems: "center", gap: 4 }}>
+              BPM
+              {bpmDetecting && (
+                <span style={{ color: color + "cc", letterSpacing: 0, animation: "pulse 1s ease-in-out infinite" }}>· detecting…</span>
+              )}
+            </div>
             <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 700, lineHeight: 1, color,
               textShadow: `0 0 24px ${color}66, 0 2px 4px rgba(0,0,0,0.6)` }}>{effBpm}</div>
           </div>
@@ -693,6 +943,7 @@ function DeckPanel({ side, color, info, onInfoChange, audioRef, onLoad, playing,
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -710,9 +961,10 @@ function useClock() {
 // ─── App ─────────────────────────────────────────────────────────────────────
 const initDeck = (bpm: number, pos: number, type: KeyType): DeckInfo => ({
   camelotPos: pos, camelotType: type, bpm, tempo: 0, trackName: "", loaded: false,
+  source: "local",
 });
 
-export default function App() {
+export default function App({ onOpenSpotify }: { onOpenSpotify?: () => void }) {
   const [deckA,   setDeckA]   = useState<DeckInfo>(initDeck(128, 8, "B"));
   const [deckB,   setDeckB]   = useState<DeckInfo>(initDeck(128, 5, "A"));
   const [peaksA,  setPeaksA]  = useState<number[]>([]);
@@ -730,12 +982,24 @@ export default function App() {
   const dragRef = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
   const audioARef = useRef<DeckAudio | null>(null);
   const audioBRef = useRef<DeckAudio | null>(null);
+  // YouTube controllers — created lazily by YouTubeDeckBody when a deck switches
+  // to that source, torn down when it switches back.
+  const ytARef = useRef<YouTubeController | null>(null);
+  const ytBRef = useRef<YouTubeController | null>(null);
   const clock = useClock();
 
   if (!audioARef.current && typeof AudioContext !== "undefined") {
     const ctx = getCtx();
     audioARef.current = new DeckAudio(ctx);
     audioBRef.current = new DeckAudio(ctx);
+  }
+
+  // The active transport for a deck: its YouTube controller when that's the
+  // source, otherwise its Web Audio engine. Both expose play/pause/currentTime.
+  function engine(side: "A" | "B"): { play(): void; pause(): void } | null {
+    const src = side === "A" ? deckA.source : deckB.source;
+    if (src === "youtube") return side === "A" ? ytARef.current : ytBRef.current;
+    return side === "A" ? audioARef.current : audioBRef.current;
   }
 
   useEffect(() => {
@@ -753,12 +1017,12 @@ export default function App() {
     const { la, lb, pa, pb } = stateRef.current;
     if (side === "A") {
       if (!la) return;
-      if (pa) { audioARef.current?.pause(); setPlayingA(false); }
-      else    { audioARef.current?.play();  setPlayingA(true); }
+      if (pa) { engine("A")?.pause(); setPlayingA(false); }
+      else    { engine("A")?.play();  setPlayingA(true); }
     } else {
       if (!lb) return;
-      if (pb) { audioBRef.current?.pause(); setPlayingB(false); }
-      else    { audioBRef.current?.play();  setPlayingB(true); }
+      if (pb) { engine("B")?.pause(); setPlayingB(false); }
+      else    { engine("B")?.play();  setPlayingB(true); }
     }
   }
 
@@ -766,35 +1030,58 @@ export default function App() {
   function masterToggle() {
     const { la, lb, pa, pb } = stateRef.current;
     if (pa || pb) {
-      audioARef.current?.pause(); audioBRef.current?.pause();
+      engine("A")?.pause(); engine("B")?.pause();
       setPlayingA(false); setPlayingB(false);
     } else {
-      if (la) { audioARef.current?.play(); setPlayingA(true); }
-      if (lb) { audioBRef.current?.play(); setPlayingB(true); }
+      if (la) { engine("A")?.play(); setPlayingA(true); }
+      if (lb) { engine("B")?.play(); setPlayingB(true); }
+    }
+  }
+
+  // Switching source: stop whatever's playing on that deck and reset its slot.
+  function changeSource(side: "A" | "B", next: DeckSource) {
+    if (side === "A") {
+      audioARef.current?.pause(); ytARef.current?.pause();
+      setPlayingA(false);
+      setPeaksA([]); setDurA(0);
+      setDeckA(d => ({ ...d, source: next, loaded: false, trackName: "" }));
+    } else {
+      audioBRef.current?.pause(); ytBRef.current?.pause();
+      setPlayingB(false);
+      setPeaksB([]); setDurB(0);
+      setDeckB(d => ({ ...d, source: next, loaded: false, trackName: "" }));
     }
   }
 
   // ── Checkpoints ────────────────────────────────────────────────────────────
+  // Whichever transport currently backs a deck, for time read/seek. YouTube and
+  // Web Audio both expose currentTime() and seek().
+  const transport = (side: "A" | "B") => {
+    const src = side === "A" ? deckA.source : deckB.source;
+    if (src === "youtube") return side === "A" ? ytARef.current : ytBRef.current;
+    return side === "A" ? audioARef.current : audioBRef.current;
+  };
+
   // Enter snapshots both decks' current positions as one numbered checkpoint.
   function addCheckpoint() {
     const { la, lb } = stateRef.current;
     if (!la && !lb) return;
-    const tA = audioARef.current?.currentTime() ?? 0;
-    const tB = audioBRef.current?.currentTime() ?? 0;
+    const tA = transport("A")?.currentTime() ?? 0;
+    const tB = transport("B")?.currentTime() ?? 0;
     setCheckpoints(cs => [...cs, { id: cpIdRef.current++, tA, tB }]);
   }
   // Jump both decks to a checkpoint's positions — playback state is untouched.
   function jumpCheckpoint(id: number) {
     const cp = checkpoints.find(c => c.id === id);
     if (!cp) return;
-    audioARef.current?.seek(cp.tA);
-    audioBRef.current?.seek(cp.tB);
+    transport("A")?.seek(cp.tA);
+    transport("B")?.seek(cp.tB);
   }
   // Sync B onto A using a checkpoint: at that CP both decks were meant to be at
   // the same musical point, so shift B by the A/B offset recorded there.
   function syncFromCheckpoint(id: number) {
     const cp = checkpoints.find(c => c.id === id);
-    const b  = audioBRef.current;
+    const b  = transport("B");
     if (!cp || !b) return;
     b.seek(b.currentTime() + (cp.tA - cp.tB));
   }
@@ -952,16 +1239,20 @@ export default function App() {
             peaksA={peaksA} peaksB={peaksB}
             durationA={durA} durationB={durB}
             bpmA={effA} bpmB={effB}
-            loadedA={deckA.loaded} loadedB={deckB.loaded}
+            loadedA={deckA.loaded && deckA.source === "local"}
+            loadedB={deckB.loaded && deckB.source === "local"}
             audioARef={audioARef} audioBRef={audioBRef}
+            checkpoints={checkpoints}
           />
           <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 272px 1fr", minHeight: 0 }}>
             <div style={{ minHeight: 0 }}>
               <DeckPanel side="A" color={CA} info={deckA}
                 onInfoChange={p => setDeckA(d => ({ ...d, ...p }))}
-                audioRef={audioARef}
+                audioRef={audioARef} ytRef={ytARef}
                 onLoad={(pk, dur) => { setPeaksA(pk); setDurA(dur); }}
-                playing={playingA} onToggle={() => toggleDeck("A")} />
+                playing={playingA} onToggle={() => toggleDeck("A")}
+                onSourceChange={s => changeSource("A", s)}
+                onPlayingChange={setPlayingA} />
             </div>
 
             {/* ── Mixer column ── */}
@@ -1099,9 +1390,11 @@ export default function App() {
             <div style={{ minHeight: 0 }}>
               <DeckPanel side="B" color={CB} info={deckB}
                 onInfoChange={p => setDeckB(d => ({ ...d, ...p }))}
-                audioRef={audioBRef}
+                audioRef={audioBRef} ytRef={ytBRef}
                 onLoad={(pk, dur) => { setPeaksB(pk); setDurB(dur); }}
-                playing={playingB} onToggle={() => toggleDeck("B")} />
+                playing={playingB} onToggle={() => toggleDeck("B")}
+                onSourceChange={s => changeSource("B", s)}
+                onPlayingChange={setPlayingB} />
             </div>
           </div>
         </div>
@@ -1116,17 +1409,31 @@ export default function App() {
         borderTop: "1px solid rgba(255,255,255,0.4)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5), 0 -2px 10px rgba(0,0,0,0.4)",
       }}>
-        <button style={{
-          display: "flex", alignItems: "center", gap: 7, height: 26, padding: "0 16px 0 10px",
-          borderRadius: "6px 14px 14px 6px", cursor: "pointer",
-          border: "1px solid rgba(255,255,255,0.35)",
-          background: "linear-gradient(180deg, #7dd36a 0%, #3fa02f 45%, #2f7f22 55%, #256b1c 100%)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.4)",
-          color: "#fff", fontFamily: COND, fontSize: 15, fontWeight: 800, fontStyle: "italic",
-          textShadow: "0 1px 2px rgba(0,0,0,0.5)", letterSpacing: "0.04em",
-        }}>
-          <Music size={15} /> start
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button style={{
+            display: "flex", alignItems: "center", gap: 7, height: 26, padding: "0 16px 0 10px",
+            borderRadius: "6px 14px 14px 6px", cursor: "pointer",
+            border: "1px solid rgba(255,255,255,0.35)",
+            background: "linear-gradient(180deg, #7dd36a 0%, #3fa02f 45%, #2f7f22 55%, #256b1c 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.4)",
+            color: "#fff", fontFamily: COND, fontSize: 15, fontWeight: 800, fontStyle: "italic",
+            textShadow: "0 1px 2px rgba(0,0,0,0.5)", letterSpacing: "0.04em",
+          }}>
+            <Music size={15} /> start
+          </button>
+          {onOpenSpotify && (
+            <button onClick={onOpenSpotify} style={{
+              display: "flex", alignItems: "center", gap: 6, height: 24, padding: "0 12px",
+              borderRadius: 5, cursor: "pointer",
+              border: "1px solid rgba(255,255,255,0.3)",
+              background: "linear-gradient(180deg, rgba(29,185,84,0.9), rgba(20,120,55,0.9))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 5px rgba(0,0,0,0.4)",
+              color: "#fff", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em",
+            }}>
+              <Music2 size={12} /> SPOTIFY
+            </button>
+          )}
+        </div>
         <div style={{
           display: "flex", alignItems: "center", gap: 6, height: 24, padding: "0 12px",
           borderRadius: 5, color: "#dfe7ff", fontFamily: MONO, fontSize: 10,
