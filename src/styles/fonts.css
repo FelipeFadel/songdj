@@ -1,1 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Barlow+Condensed:wght@400;600;700;800&display=swap');
+@font-face {
+  font-family: 'W95FA';
+  src: url('../assets/fonts/w95fa.woff') format('woff');
+  font-display: block;
+}

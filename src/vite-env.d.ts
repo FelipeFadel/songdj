@@ -8,3 +8,6 @@ declare module "*.wav" {
   const src: string;
   export default src;
 }
+declare module "butterchurn";
+declare module "butterchurn-presets";
+declare module "soundtouchjs";

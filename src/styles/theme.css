@@ -1,43 +1,57 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: #07070f;
-  color: #fff;
+  background: #008080;
+  color: #000;
+  font-family: W95FA, 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 12px;
+  -webkit-font-smoothing: none;
 }
 
 #root {
   min-height: 100vh;
 }
 
-/* deck level-meter bounce */
-@keyframes bounce-0 { from { height: 20%; } to { height: 70%; } }
-@keyframes bounce-1 { from { height: 30%; } to { height: 95%; } }
-@keyframes bounce-2 { from { height: 40%; } to { height: 100%; } }
-@keyframes bounce-3 { from { height: 30%; } to { height: 85%; } }
-@keyframes bounce-4 { from { height: 20%; } to { height: 60%; } }
+/* Win98 button states. `.flat` opts out (list rows, links). */
+button:not(.flat):active:not(:disabled) {
+  box-shadow: inset -1px -1px #F0F0F0, inset 1px 1px #262626, inset -2px -2px #B1B1B1, inset 2px 2px #7E7E7E !important;
+}
+button:disabled {
+  color: #7E7E7E !important;
+  text-shadow: 1px 1px #fff;
+  cursor: default !important;
+}
+button:focus-visible {
+  outline: 1px dotted #000;
+  outline-offset: -4px;
+}
 
-/* Frutiger Aero desktop bubbles */
-@keyframes float-0 {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(24px, -32px) scale(1.06); }
+.menu-item:hover {
+  background: #000080 !important;
+  color: #fff !important;
 }
-@keyframes float-1 {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(-28px, 26px) scale(0.94); }
+
+::-webkit-scrollbar { width: 16px; height: 16px; background: #C3C3C3; }
+::-webkit-scrollbar-track { background: repeating-conic-gradient(#C3C3C3 0 25%, #F0F0F0 0 50%) 0 0 / 2px 2px; }
+::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-button:single-button {
+  display: block; height: 16px; background: #C3C3C3;
+  box-shadow: inset -1px -1px #262626, inset 1px 1px #F0F0F0, inset -2px -2px #7E7E7E;
 }
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
 
-/* range thumbs — keep native controls glossy where they show through */
+/* ranges are drawn by hand; the native input sits invisible on top */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
